@@ -1,0 +1,8 @@
+# Store and check out text files with LF line endings on every platform.
+# Prevents phantom changes from core.autocrlf on Windows, e.g. on the
+# generated loader.js / panel.js.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.zip binary
