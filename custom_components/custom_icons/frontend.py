@@ -32,6 +32,12 @@ collections: list[IconSetCollection] = [
 icon_cache = defaultdict(dict)
 
 
+def _is_active(hass: HomeAssistant, prefix: str) -> bool:
+    """Only icon sets enabled in the configuration panel are served."""
+    entries = hass.config_entries.async_entries(DOMAIN)
+    return bool(entries) and bool(entries[0].data.get(prefix))
+
+
 def _file_hash(path: str) -> str:
     with open(path, "rb") as fp:
         return hashlib.md5(fp.read()).hexdigest()[:8]
@@ -117,6 +123,10 @@ async def ws_get_icon_list(
     prefix = msg["set"]
 
     lst = []
+    if not _is_active(hass, prefix):
+        connection.send_result(msg["id"], lst)
+        return
+
     for collection in collections:
         if prefix in await collection.prefixes(hass):
             lst = await collection.list(hass, prefix)
@@ -141,6 +151,10 @@ async def ws_get_icon(
     """Get an icon"""
     prefix = msg["set"]
     icon = msg["icon"]
+
+    if not _is_active(hass, prefix):
+        connection.send_error(msg["id"], "not_found", f"Icon set {prefix} is not enabled")
+        return
 
     icn = icon_cache[prefix].get(icon, None)
     if icn is None:
@@ -178,7 +192,10 @@ async def ws_get_cached_icons(
 ):
     """Get all cached icons"""
     prefix = msg["set"]
-    connection.send_result(msg["id"], list(icon_cache[prefix].values()))
+    if not _is_active(hass, prefix):
+        connection.send_result(msg["id"], [])
+        return
+    connection.send_result(msg["id"], list(icon_cache.get(prefix, {}).values()))
 
 
 @websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/iconify_download"})

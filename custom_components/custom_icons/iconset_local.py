@@ -2,6 +2,7 @@ import asyncio
 import os
 import logging
 import random
+from xml.parsers.expat import ExpatError
 from homeassistant.core import HomeAssistant
 
 from .iconset_base import (
@@ -84,9 +85,27 @@ class LocalSet(IconSetCollection):
         self, hass: HomeAssistant, prefix: str, icon: str
     ) -> IconData | None:
 
-        icon_path = hass.config.path(ICON_PATH + "/" + icon + ".svg")
+        # abspath (not realpath), so symlinks placed in the icon directory on
+        # purpose keep working, while "..", and absolute names are rejected.
+        root = os.path.abspath(hass.config.path(ICON_PATH))
+        icon_path = os.path.abspath(os.path.join(root, icon + ".svg"))
+
+        # The icon name comes from the websocket API, which any logged in user
+        # can call. Without this check "local:../../something" could read any
+        # .svg file on the system.
+        try:
+            inside = os.path.commonpath([root, icon_path]) == root
+        except ValueError:  # Different drives (Windows)
+            inside = False
+        if not inside:
+            LOGGER.warning("Refusing to load local icon outside %s: %s", root, icon)
+            return None
 
         loop = asyncio.get_running_loop()
-        icon = await loop.run_in_executor(None, read_icon, icon_path)
-
-        return process_svg(icon)
+        try:
+            svg = await loop.run_in_executor(None, read_icon, icon_path)
+            return process_svg(svg)
+        except (OSError, ExpatError, IndexError) as err:
+            # Missing file, unreadable file or not a valid SVG
+            LOGGER.debug("Could not load local icon %s: %s", icon, err)
+            return None
