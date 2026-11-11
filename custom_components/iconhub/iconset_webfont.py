@@ -11,7 +11,6 @@ from .iconset_base import (
     IconSetInfo,
     IconListItem,
 )
-from .const import DOMAIN, icon_dir
 
 LOGGER = logging.getLogger(__name__)
 
@@ -69,7 +68,8 @@ def _process_icon(path, size):
 
 class WebfontSets(IconSetCollection):
 
-    def __init__(self):
+    def __init__(self, icon_dir: str):
+        self.icon_dir = icon_dir
         self.data_task: asyncio.Future | None = None
 
     def flush(self) -> None:
@@ -81,7 +81,7 @@ class WebfontSets(IconSetCollection):
         # and concurrent requests share the same loading task.
         if self.data_task is None:
             self.data_task = hass.async_add_executor_job(
-                _load_fonts, icon_dir(hass)
+                _load_fonts, self.icon_dir
             )
         task = self.data_task
         try:
@@ -93,9 +93,6 @@ class WebfontSets(IconSetCollection):
 
     async def sets(self, hass: HomeAssistant) -> dict[str, IconSetInfo]:
 
-        config = hass.config_entries.async_entries(DOMAIN)
-        config = config[0] if config else {}
-
         fonts = await self.data(hass)
 
         sets = {}
@@ -106,7 +103,6 @@ class WebfontSets(IconSetCollection):
                 "name": prefix,
                 "prefix": prefix,
                 "total": len(names),
-                "active": config.data.get(prefix, False),
                 "sample_icons": [
                     _process_icon(font["glyphs"][n], font["size"]) for n in samples
                 ],

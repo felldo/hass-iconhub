@@ -9,7 +9,6 @@ from homeassistant.core import HomeAssistant
 
 from .iconset_base import IconSetCollection, IconData, IconSetInfo, IconListItem
 
-from .const import DOMAIN, icon_dir
 
 
 LOGGER = logging.getLogger(__name__)
@@ -18,8 +17,8 @@ FONTAWESOME_FILENAME = "fontawesome.json"
 PREPREFIX = "fapro-"
 
 
-def get_data_file(hass: HomeAssistant) -> dict:
-    filepath = os.path.join(icon_dir(hass), FONTAWESOME_FILENAME)
+def get_data_file(icon_dir: str) -> dict:
+    filepath = os.path.join(icon_dir, FONTAWESOME_FILENAME)
     try:
         with open(filepath) as fp:
             js = json.loads(fp.read())
@@ -28,14 +27,14 @@ def get_data_file(hass: HomeAssistant) -> dict:
         return None
 
 
-def _load_icons(hass: HomeAssistant) -> dict | None:
+def _load_icons(icon_dir: str) -> dict | None:
     """Read fontawesome.json once and keep only what is needed.
 
     Returns {"lists": {style: [IconListItem]}, "svgs": {style: {name: svg}}}.
     The metadata file is large, so everything else in it (unicode values,
     labels, changes, ...) is dropped instead of being kept in memory.
     """
-    datafile = get_data_file(hass)
+    datafile = get_data_file(icon_dir)
     if not datafile:
         return None
 
@@ -56,7 +55,8 @@ def _load_icons(hass: HomeAssistant) -> dict | None:
 
 class FontawesomeSets(IconSetCollection):
 
-    def __init__(self):
+    def __init__(self, icon_dir: str):
+        self.icon_dir = icon_dir
         self.cache: dict[str, IconSetInfo] = {}
         self.data_task: asyncio.Future | None = None
 
@@ -70,7 +70,7 @@ class FontawesomeSets(IconSetCollection):
         # meant many full parses at once. Now it is loaded once, and concurrent
         # requests share the same loading task.
         if self.data_task is None:
-            self.data_task = hass.async_add_executor_job(_load_icons, hass)
+            self.data_task = hass.async_add_executor_job(_load_icons, self.icon_dir)
         task = self.data_task
         try:
             return await asyncio.shield(task)
@@ -83,9 +83,6 @@ class FontawesomeSets(IconSetCollection):
 
         if self.cache:
             return self.cache
-
-        config = hass.config_entries.async_entries(DOMAIN)
-        config = config[0] if config else {}
 
         data = await self.data(hass)
         if not data:
@@ -101,17 +98,16 @@ class FontawesomeSets(IconSetCollection):
                 "name": f"Fontawesome {k}",
                 "prefix": prefix,
                 "total": len(v),
-                "active": config.data.get(prefix, False),
                 "sample_icons": samples,
             }
 
         return self.cache
 
     async def prefixes(self, hass: HomeAssistant) -> list[str]:
-        config = hass.config_entries.async_entries(DOMAIN)
-        config = config[0] if config else {}
-
-        return [p for p in config.data if p.startswith(PREPREFIX)]
+        data = await self.data(hass)
+        if not data:
+            return []
+        return [PREPREFIX + style for style in data["lists"]]
 
     async def list(self, hass: HomeAssistant, prefix: str) -> list[IconListItem]:
 

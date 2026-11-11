@@ -1,80 +1,69 @@
+"""Iconify icon sets, downloaded one set at a time.
+
+Previously the whole iconify/icon-sets repository was downloaded as a zip
+archive and every set was read from it. Now only the list of available sets
+(collections.json, ~150 kB) and the JSON files of the *enabled* sets are
+downloaded and stored in <icon dir>/iconify/.
+"""
+
 import asyncio
-import aiohttp
-import zipfile
 import json
-import os
-import random
 import logging
+import os
+import re
+from collections.abc import Callable, Coroutine
+from typing import Any
+
+import aiohttp
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .iconset_base import IconSetCollection, IconData, IconSetInfo, IconListItem
 
-from .const import DOMAIN, icon_dir
-
-
 LOGGER = logging.getLogger(__name__)
 
-ICONIFY_REPO_URL = "https://github.com/iconify/icon-sets/archive/refs/heads/master.zip"
-ICONIFY_REPO_FILENAME = "iconify-icon-sets-master.zip"
+ICONIFY_BASE_URL = "https://raw.githubusercontent.com/iconify/icon-sets/master"
+COLLECTIONS_FILENAME = "collections.json"
+ICONIFY_DIRNAME = "iconify"
+
+DOWNLOAD_TIMEOUT = aiohttp.ClientTimeout(total=300, connect=30, sock_read=60)
+
+# Iconify prefixes are lowercase words separated by single dashes. Checked
+# before a prefix is used in a URL or file name.
+PREFIX_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+
+TaskFactory = Callable[[Coroutine[Any, Any, Any], str], asyncio.Future]
 
 
-DOWNLOAD_TIMEOUT = aiohttp.ClientTimeout(total=None, connect=30, sock_read=60)
-DOWNLOAD_CHUNK_SIZE = 1024 * 1024
+def valid_prefix(prefix: str) -> bool:
+    return bool(PREFIX_RE.match(prefix))
 
 
-def _load_file(path: str) -> zipfile.ZipFile:
-    return zipfile.ZipFile(path)
-
-
-def _load_json(path: zipfile.Path) -> dict:
-    with path.open() as fp:
-        return json.load(fp)
-
-
-def _finish_download(tmp: str, target: str):
-    if not zipfile.is_zipfile(tmp):
-        raise ValueError("Downloaded Iconify archive is not a valid zip file")
-    # Atomic: a failed or interrupted download never replaces a working archive
-    os.replace(tmp, target)
-
-
-def _remove_file(path: str):
+def _read_json(path: str) -> dict | None:
     try:
-        os.remove(path)
+        with open(path, encoding="utf-8") as fp:
+            return json.load(fp)
     except FileNotFoundError:
-        pass
+        return None
 
 
-async def download_data(hass: HomeAssistant, force: bool = False):
-
-    targetpath = icon_dir(hass)
-    target = os.path.join(targetpath, ICONIFY_REPO_FILENAME)
-
-    if not force:
-        exists = await hass.async_add_executor_job(os.path.isfile, target)
-        return target if exists else None
-
-    session = async_get_clientsession(hass)
-    tmp = target + ".part"
-
+def _write_json_atomic(path: str, raw: bytes, required_key: str | None) -> dict:
+    """Validate downloaded JSON and replace the file atomically."""
+    data = json.loads(raw)
+    if not isinstance(data, dict) or (required_key and required_key not in data):
+        raise ValueError(f"Unexpected content for {os.path.basename(path)}")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".part"
     try:
-        async with session.get(ICONIFY_REPO_URL, timeout=DOWNLOAD_TIMEOUT) as response:
-            response.raise_for_status()
-            # Streamed to disk - the archive is far too large to buffer in memory
-            fp = await hass.async_add_executor_job(open, tmp, "wb")
-            try:
-                async for chunk in response.content.iter_chunked(DOWNLOAD_CHUNK_SIZE):
-                    await hass.async_add_executor_job(fp.write, chunk)
-            finally:
-                await hass.async_add_executor_job(fp.close)
-        await hass.async_add_executor_job(_finish_download, tmp, target)
-    except BaseException:
-        await hass.async_add_executor_job(_remove_file, tmp)
-        raise
-
-    return target
+        with open(tmp, "wb") as fp:
+            fp.write(raw)
+        # A failed download never replaces a working file
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+    return data
 
 
 def _resolve_icon(datafile: dict, name: str) -> dict | None:
@@ -124,131 +113,214 @@ def _icon_data(datafile: dict, icon: str) -> IconData | None:
     return icon_data
 
 
-async def _get_data_files(hass: HomeAssistant) -> zipfile.Path:
-
-    path = await download_data(hass)
-    if not path:
-        return None
-
-    loop = asyncio.get_running_loop()
-    zf = await loop.run_in_executor(None, _load_file, path)
-    data = zipfile.Path(zf) / "icon-sets-master" / "json"
-
-    return data
-
-
 class IconifySets(IconSetCollection):
 
-    def __init__(self):
-        self.cache: dict[str, IconSetInfo] = {}
-        self.prefix_cache = None
-        self.data_cache: dict = {}
+    def __init__(self, icon_dir: str):
+        self.dir = os.path.join(icon_dir, ICONIFY_DIRNAME)
+        # Creates tasks tied to the config entry (cancelled on unload).
+        # Replaced by the integration setup; plain tasks are used otherwise.
+        self.create_task: TaskFactory | None = None
+        self._collections: asyncio.Future | None = None
+        self._sets: dict[str, asyncio.Future] = {}
+        self._downloads: dict[str, asyncio.Future] = {}
 
     def flush(self) -> None:
-        self.cache = {}
-        self.prefix_cache = None
-        self.data_cache = {}
+        # Drops parsed data only. Running downloads are kept and shared.
+        self._collections = None
+        self._sets = {}
 
-    async def data(self, hass, prefix="/"):
-        # Icon set files can be several MB (material-symbols is ~9 MB) and were
-        # read and parsed inside the event loop, freezing Home Assistant while
-        # it happened. They are now loaded in the executor. The cache holds the
-        # loading task, so concurrent requests for the same set (the frontend
-        # now fetches icons in parallel) share one load instead of parsing the
-        # same file several times. A failed load is removed so it can be retried.
-        if not prefix in self.data_cache:
-            self.data_cache[prefix] = hass.async_create_task(
-                self._load_data(hass, prefix)
+    def forget(self, prefix: str) -> None:
+        """Drop the parsed data of one set (e.g. when it is disabled)."""
+        self._sets.pop(prefix, None)
+
+    # ---- shared tasks
+
+    def _task(self, coro, name: str) -> asyncio.Future:
+        if self.create_task:
+            return self.create_task(coro, name)
+        return asyncio.get_running_loop().create_task(coro, name=name)
+
+    async def _shared(
+        self, cache: dict, key: str, factory, name: str, keep: bool = True
+    ):
+        """Run factory() once per key; concurrent callers share the result.
+
+        A failed run is forgotten, so the next call tries again. With
+        keep=False a finished run is forgotten too (used for downloads, so
+        the next call downloads again instead of returning the old result).
+        """
+        if key not in cache:
+            cache[key] = self._task(factory(), name)
+        task = cache[key]
+        try:
+            result = await asyncio.shield(task)
+        except Exception:
+            if cache.get(key) is task:
+                cache.pop(key, None)
+            raise
+        if not keep and cache.get(key) is task:
+            cache.pop(key, None)
+        return result
+
+    # ---- downloads
+
+    async def _download(
+        self, hass: HomeAssistant, url: str, path: str, required_key: str | None
+    ) -> dict:
+        session = async_get_clientsession(hass)
+        async with session.get(url, timeout=DOWNLOAD_TIMEOUT) as response:
+            response.raise_for_status()
+            raw = await response.read()
+        return await hass.async_add_executor_job(
+            _write_json_atomic, path, raw, required_key
+        )
+
+    async def _download_collections(self, hass: HomeAssistant) -> dict:
+        return await self._shared(
+            self._downloads,
+            "/collections",
+            lambda: self._download(
+                hass,
+                f"{ICONIFY_BASE_URL}/{COLLECTIONS_FILENAME}",
+                os.path.join(self.dir, COLLECTIONS_FILENAME),
+                None,
+            ),
+            "iconhub_download_collections",
+            keep=False,
+        )
+
+    async def download_set(self, hass: HomeAssistant, prefix: str) -> dict:
+        """Download (or update) one icon set."""
+        if not valid_prefix(prefix) or prefix not in await self.collections(hass):
+            raise ValueError(f"Unknown Iconify icon set: {prefix}")
+        data = await self._shared(
+            self._downloads,
+            prefix,
+            lambda: self._download(
+                hass,
+                f"{ICONIFY_BASE_URL}/json/{prefix}.json",
+                self._set_path(prefix),
+                "icons",
+            ),
+            f"iconhub_download_{prefix}",
+            keep=False,
+        )
+        return data
+
+    async def ensure_downloaded(self, hass: HomeAssistant, prefixes: list[str]):
+        """Download enabled sets that are missing. Errors are only logged."""
+        try:
+            available = await self.collections(hass)
+        except Exception as err:
+            LOGGER.warning("Could not load the list of Iconify icon sets: %s", err)
+            return
+        for prefix in prefixes:
+            if prefix not in available:
+                continue
+            exists = await hass.async_add_executor_job(
+                os.path.isfile, self._set_path(prefix)
             )
-        task = self.data_cache[prefix]
+            if exists:
+                continue
+            try:
+                await self.download_set(hass, prefix)
+            except Exception as err:
+                LOGGER.warning("Could not download Iconify set %s: %s", prefix, err)
+
+    async def update(self, hass: HomeAssistant, prefixes: list[str]) -> list[str]:
+        """Refresh the set list and re-download the given (enabled) sets.
+
+        Returns the prefixes that failed to update.
+        """
+        await self._download_collections(hass)
+        self._collections = None
+        available = await self.collections(hass)
+        failed = []
+        for prefix in prefixes:
+            if prefix not in available:
+                continue
+            try:
+                await self.download_set(hass, prefix)
+            except Exception as err:
+                LOGGER.warning("Could not update Iconify set %s: %s", prefix, err)
+                failed.append(prefix)
+            else:
+                self._sets.pop(prefix, None)  # Parse the new file on next use
+        return failed
+
+    # ---- data
+
+    def _set_path(self, prefix: str) -> str:
+        return os.path.join(self.dir, "json", f"{prefix}.json")
+
+    async def collections(self, hass: HomeAssistant) -> dict:
+        """All available Iconify sets: {prefix: info}."""
+
+        async def load():
+            path = os.path.join(self.dir, COLLECTIONS_FILENAME)
+            data = await hass.async_add_executor_job(_read_json, path)
+            if data is None:
+                data = await self._download_collections(hass)
+            return {k: v for k, v in data.items() if valid_prefix(k)}
+
+        if self._collections is None:
+            self._collections = self._task(load(), "iconhub_load_collections")
+        task = self._collections
         try:
             return await asyncio.shield(task)
         except Exception:
-            # Only drop our own task - a flush may already have replaced it
-            if self.data_cache.get(prefix) is task:
-                self.data_cache.pop(prefix, None)
+            if self._collections is task:
+                self._collections = None
             raise
 
-    async def _load_data(self, hass, prefix):
-        if prefix == "/":
-            return await _get_data_files(hass)
-        root = await self.data(hass)
-        if not root:
+    async def data(self, hass: HomeAssistant, prefix: str) -> dict | None:
+        """Parsed icon set. Downloaded first if it isn't stored yet."""
+        if not valid_prefix(prefix):
             return None
-        return await hass.async_add_executor_job(
-            _load_json, root / f"{prefix}.json"
-        )
+
+        async def load():
+            data = await hass.async_add_executor_job(
+                _read_json, self._set_path(prefix)
+            )
+            if data is None:
+                data = await self.download_set(hass, prefix)
+            return data
+
+        return await self._shared(self._sets, prefix, load, f"iconhub_load_{prefix}")
+
+    # ---- IconSetCollection
 
     async def sets(self, hass: HomeAssistant) -> dict[str, IconSetInfo]:
-
-        if self.cache:
-            return self.cache
-
-        config = hass.config_entries.async_entries(DOMAIN)
-        config = config[0] if config else {}
-
-        data = await self.data(hass)
-        if not data:
-            return {}
-        for f in data.iterdir():
-            # Parse in the executor, see data()
-            js = await hass.async_add_executor_job(_load_json, f)
-
-            prefix = js["prefix"]
-
-            samples = js.get("info", {}).get("samples", [])
-            if not samples:
-                icons = list(js.get("icons", {}).keys())
-                if len(icons):
-                    samples = random.sample(icons, min(6, len(icons)))
-            # Built from the already loaded file. Going through self.icon()
-            # would load every set a second time and keep all of them in
-            # data_cache, i.e. in memory, until the next restart.
-            samples = [_icon_data(js, icon) for icon in samples]
-
-            self.cache[prefix] = {
-                **js.get("info", {}),
+        result = {}
+        for prefix, info in (await self.collections(hass)).items():
+            result[prefix] = {
+                **info,
                 "prefix": prefix,
-                "active": config.data.get(prefix, False),
-                "sample_icons": samples,
+                "renderer": "iconify",
+                # Previews are loaded by the browser from the Iconify API, so
+                # the panel doesn't need any set to be downloaded.
+                "sample_icons": [],
+                "sample_names": info.get("samples", [])[:6],
             }
-
-        return self.cache
+        return result
 
     async def prefixes(self, hass: HomeAssistant) -> list[str]:
-
-        if self.prefix_cache:
-            return self.prefix_cache
-        data = await self.data(hass)
-        if not data:
+        try:
+            return list(await self.collections(hass))
+        except Exception as err:
+            LOGGER.debug("Iconify icon sets unavailable: %s", err)
             return []
-
-        config = hass.config_entries.async_entries(DOMAIN)
-        config = config[0] if config else {}
-
-        self.prefix_cache = []
-        for prefix in config.data:
-            if data.joinpath(prefix + ".json").is_file():
-                self.prefix_cache.append(prefix)
-
-        return self.prefix_cache
 
     async def list(self, hass: HomeAssistant, prefix: str) -> list[IconListItem]:
-
         datafile = await self.data(hass, prefix)
-
         if not datafile:
             return []
-
         return [{"name": k} for k in datafile.get("icons", {}).keys()]
 
     async def icon(
         self, hass: HomeAssistant, prefix: str, icon: str
     ) -> IconData | None:
-
         datafile = await self.data(hass, prefix)
-
         if not datafile:
             return None
-
         return _icon_data(datafile, icon)

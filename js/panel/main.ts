@@ -14,13 +14,19 @@ class IconHubPanel extends LitElement {
   @property() connection;
 
   @property() sets;
+  @property() error?: string;
 
   async _get_sets() {
     this.sets = null;
+    this.error = undefined;
     this.requestUpdate();
-    this.sets = await this.hass.connection.sendMessagePromise({
-      type: "iconhub/sets",
-    });
+    try {
+      this.sets = await this.hass.connection.sendMessagePromise({
+        type: "iconhub/sets",
+      });
+    } catch (err) {
+      this.error = err?.message ?? String(err);
+    }
   }
 
   _clear() {
@@ -56,7 +62,13 @@ class IconHubPanel extends LitElement {
                 ></iconhub-select-set-card>
               `
             : html`<ha-card outlined
-                ><div class="card-content"><p>Loading...</p></div></ha-card
+                ><div class="card-content">
+                  ${this.error
+                    ? html`<ha-alert alert-type="error" title="Could not load icon sets">
+                        ${this.error}
+                      </ha-alert>`
+                    : html`<p>Loading...</p>`}
+                </div></ha-card
               >`}
         </ha-config-section>
       </ha-top-app-bar-fixed>

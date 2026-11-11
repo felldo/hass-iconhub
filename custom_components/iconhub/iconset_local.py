@@ -12,7 +12,6 @@ from .iconset_base import (
     IconListItem,
     process_svg,
 )
-from .const import DOMAIN, icon_dir
 
 LOGGER = logging.getLogger(__name__)
 
@@ -38,7 +37,8 @@ def read_icon(path: str) -> str:
 
 class LocalSet(IconSetCollection):
 
-    def __init__(self):
+    def __init__(self, icon_dir: str):
+        self.icon_dir = icon_dir
         self.cache = []
 
     def flush(self) -> None:
@@ -48,9 +48,6 @@ class LocalSet(IconSetCollection):
         prefix = "local"
         icons = await self.list(hass, prefix)
 
-        config = hass.config_entries.async_entries(DOMAIN)
-        config = config[0] if config else {}
-
         samples = random.sample(icons, min(6, len(icons)))
         samples = [await self.icon(hass, prefix, icon["name"]) for icon in samples]
 
@@ -59,7 +56,6 @@ class LocalSet(IconSetCollection):
                 "name": "Local",
                 "prefix": prefix,
                 "total": len(icons),
-                "active": config.data.get(prefix, False),
                 "sample_icons": samples,
             }
         }
@@ -71,7 +67,7 @@ class LocalSet(IconSetCollection):
         if self.cache:
             return self.cache
 
-        icon_path = icon_dir(hass)
+        icon_path = self.icon_dir
 
         loop = asyncio.get_running_loop()
 
@@ -87,7 +83,7 @@ class LocalSet(IconSetCollection):
 
         # abspath (not realpath), so symlinks placed in the icon directory on
         # purpose keep working, while "..", and absolute names are rejected.
-        root = os.path.abspath(icon_dir(hass))
+        root = os.path.abspath(self.icon_dir)
         icon_path = os.path.abspath(os.path.join(root, icon + ".svg"))
 
         # The icon name comes from the websocket API, which any logged in user

@@ -15,7 +15,7 @@ export class IconHubDownloadCard extends LitElement {
     this.download_error = undefined;
     try {
       await this.hass.connection.sendMessagePromise({
-        type: "iconhub/iconify_download",
+        type: "iconhub/iconify_update",
       });
     } catch (err) {
       this.download_error = err?.message ?? String(err);
@@ -68,26 +68,27 @@ export class IconHubDownloadCard extends LitElement {
 
           <ha-alert alert-type="info" title="About Iconify icons">
             <a href="https://iconify.design/">Iconify</a> is a collection of
-            several popular icon sets. Updates are published frequently, and the
-            database is therefore downloaded from GitHub on request. If an icon
-            seems to be missing, try the Download button below to update the
-            local database.
+            several popular icon sets. An icon set is downloaded from GitHub when
+            you enable it below. Updates are published frequently - if an icon
+            seems to be missing, use the Update button to download the latest
+            version of all enabled sets.
           </ha-alert>
 
           <ha-settings-row>
             <span slot="heading">Update Iconify Icons</span>
             <span slot="description">
-              Download the latest icon sets from
+              Download the latest list of icon sets and the latest version of
+              all enabled sets from
               <a href="https://github.com/iconify/icon-sets">GitHub</a>.
             </span>
             <ha-button
               id="download-button"
               @click=${() => this._download_iconify()}
-              >Download</ha-button
+              >Update</ha-button
             >
           </ha-settings-row>
           ${this.download_error
-            ? html`<ha-alert alert-type="error" title="Download failed">
+            ? html`<ha-alert alert-type="error" title="Update failed">
                 ${this.download_error}
               </ha-alert>`
             : ""}

@@ -18,7 +18,7 @@ Use your own SVG icons, Iconify icon sets, Fontawesome Pro and SVG webfonts in H
 ![configuration](https://github.com/user-attachments/assets/3e88a032-0fb1-4975-95e6-07a809cd2239)
 
 - Here, in the Configuration Panel, you can pick which icon sets you want to use.
-  If you don't see any icons, make sure to click "Download" to update Iconify icons once.
+  Iconify icon sets are downloaded automatically when you enable them.
 
 ![select sets](https://github.com/user-attachments/assets/84c3289c-ec4b-40c8-b54d-be4f2f1dd89d)
 
@@ -64,9 +64,9 @@ Make sure the "Local" collection is enabled, and they will then be available usi
 
 [Iconify](https://iconify.design/) is a framework for several popular icon sets.
 
-The icon sets are update frequently, so you can manually download the lates updates from the IconHub configuration panel.
+When you enable an Iconify icon set, IconHub downloads just that set from the [Iconify icon-sets repository](https://github.com/iconify/icon-sets) and stores it in `<config>/iconhub/iconify/`. The previews in the configuration panel are loaded by your browser from the Iconify API.
 
-You also need to download them by clicking the button manually the first time.
+The icon sets are updated frequently. Use the UPDATE button in the IconHub configuration panel to download the latest version of all enabled sets.
 
 ### Fontawesome Pro icons
 
@@ -98,19 +98,20 @@ Yes
 
 - Remove `hass-fontawesome`
 - Install IconHub
-- Open the IconHub configuration panel (see [Usage](#usage) above)
-- Click "Download"
+- Open the IconHub configuration panel (see [Usage](#usage) above) and enable the icon sets you use
 
 ### How do I migrate from Custom Icons (`custom_icons`)?
 
 IconHub is based on [Custom Icons](https://github.com/thomasloven/hass-custom_icons) by Thomas Lovén, but uses its own domain (`iconhub`), so both can't share a configuration.
 
-- Remove the Custom Icons integration (and its HACS entry)
-- Install IconHub and add the integration (see [Installation](#installation))
-- Enable your icon sets again in the IconHub configuration panel
+- Install IconHub and add the integration (see [Installation](#installation)) **before** removing Custom Icons. IconHub then takes over the icon sets you had enabled in Custom Icons.
+- Remove the Custom Icons integration (and its HACS entry) and restart Home Assistant
+- Check the enabled icon sets in the IconHub configuration panel
 - Icon names and prefixes stay the same (e.g. `local:my-icon`, `fapro-solid:house`, `tabler:home`), so dashboards and entities don't need to be changed
 
 Your existing `<config>/custom_icons` directory is used automatically as long as there is no `<config>/iconhub` directory. To switch to the new location, rename `custom_icons` to `iconhub` and restart Home Assistant.
+
+IconHub doesn't use the large `iconify-icon-sets-master.zip` archive Custom Icons downloaded. You can delete it from `<config>/custom_icons/`.
 
 ### Do I need all that `#fullcolor` nonsense from `hass-fontawesome`?
 
