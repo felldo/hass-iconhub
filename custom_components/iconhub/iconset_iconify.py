@@ -11,7 +11,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .iconset_base import IconSetCollection, IconData, IconSetInfo, IconListItem
 
-from .const import DOMAIN, ICON_PATH
+from .const import DOMAIN, icon_dir
 
 
 LOGGER = logging.getLogger(__name__)
@@ -49,7 +49,7 @@ def _remove_file(path: str):
 
 async def download_data(hass: HomeAssistant, force: bool = False):
 
-    targetpath = hass.config.path(ICON_PATH)
+    targetpath = icon_dir(hass)
     target = os.path.join(targetpath, ICONIFY_REPO_FILENAME)
 
     if not force:

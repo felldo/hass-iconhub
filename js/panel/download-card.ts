@@ -1,8 +1,8 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property, query } from "lit/decorators.js";
 
-@customElement("custom-icons-download-card")
-export class CustomIconsDownloadCard extends LitElement {
+@customElement("iconhub-download-card")
+export class IconHubDownloadCard extends LitElement {
   @property() hass;
 
   @property() download_error?: string;
@@ -15,7 +15,7 @@ export class CustomIconsDownloadCard extends LitElement {
     this.download_error = undefined;
     try {
       await this.hass.connection.sendMessagePromise({
-        type: "custom_icons/iconify_download",
+        type: "iconhub/iconify_download",
       });
     } catch (err) {
       this.download_error = err?.message ?? String(err);
@@ -27,7 +27,7 @@ export class CustomIconsDownloadCard extends LitElement {
 
   async _flush_icons() {
     await this.hass.connection.sendMessage({
-      type: "custom_icons/flush_icons",
+      type: "iconhub/flush_icons",
     });
     this.dispatchEvent(new Event("reload"));
   }
@@ -35,15 +35,15 @@ export class CustomIconsDownloadCard extends LitElement {
   render() {
     return html`
       <ha-card outlined>
-        <h1 class="card-header">Custom icons</h1>
+        <h1 class="card-header">IconHub</h1>
         <div class="card-content">
           <ha-alert alert-type="warning" title="Dangers of external SVG icons">
-            SVG icons cat theoretically contain javascript and listeners or link
+            SVG icons can theoretically contain javascript and listeners or link
             to external resources. <br />
 
             Home Assistant normally protects against this, but in order to
             enable advanced features such as duotone or color support
-            <b>that protection is disabled for all Custom Icons</b>. <br />
+            <b>that protection is disabled for all IconHub icons</b>. <br />
 
             Iconify icons are allegedly validated and cleaned from any such
             potentially harmful elements, but be careful. <br />
@@ -58,7 +58,7 @@ export class CustomIconsDownloadCard extends LitElement {
             <span slot="heading">Reload Local Icons</span>
             <span slot="description">
               Reload icons in the
-              <tt>custom_icons</tt>
+              <tt>iconhub</tt>
               directory<br />
               (this includes Fontawesome-pro icons if available)
             </span>

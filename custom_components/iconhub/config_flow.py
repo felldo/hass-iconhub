@@ -8,7 +8,7 @@ from .const import DOMAIN
 LOGGER = logging.getLogger(__name__)
 
 
-class CustomIconsConfigFlow(ConfigFlow, domain=DOMAIN):
+class IconHubConfigFlow(ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
@@ -20,7 +20,7 @@ class CustomIconsConfigFlow(ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         return self.async_create_entry(
-            title="Custom Icons",
+            title="IconHub",
             data={
                 "local": True,
                 "fa6-regular": True,

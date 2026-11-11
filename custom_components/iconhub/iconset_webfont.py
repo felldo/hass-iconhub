@@ -11,7 +11,7 @@ from .iconset_base import (
     IconSetInfo,
     IconListItem,
 )
-from .const import DOMAIN, ICON_PATH
+from .const import DOMAIN, icon_dir
 
 LOGGER = logging.getLogger(__name__)
 
@@ -81,7 +81,7 @@ class WebfontSets(IconSetCollection):
         # and concurrent requests share the same loading task.
         if self.data_task is None:
             self.data_task = hass.async_add_executor_job(
-                _load_fonts, hass.config.path(ICON_PATH)
+                _load_fonts, icon_dir(hass)
             )
         task = self.data_task
         try:

@@ -58,7 +58,7 @@ export const renderIcon = (icon) => {
     path: icon.path ?? "",
     secondaryPath: icon.path2 ?? "",
     viewBox: renderedIcon.viewBox,
-    format: "custom_icons",
+    format: "iconhub",
     innerSVG: renderedIcon.body,
     attributes: renderedIcon.attributes,
   };

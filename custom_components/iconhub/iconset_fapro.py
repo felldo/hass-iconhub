@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import random
 import logging
 from collections import defaultdict
@@ -8,7 +9,7 @@ from homeassistant.core import HomeAssistant
 
 from .iconset_base import IconSetCollection, IconData, IconSetInfo, IconListItem
 
-from .const import DOMAIN, ICON_PATH
+from .const import DOMAIN, icon_dir
 
 
 LOGGER = logging.getLogger(__name__)
@@ -18,7 +19,7 @@ PREPREFIX = "fapro-"
 
 
 def get_data_file(hass: HomeAssistant) -> dict:
-    filepath = hass.config.path(ICON_PATH + "/" + FONTAWESOME_FILENAME)
+    filepath = os.path.join(icon_dir(hass), FONTAWESOME_FILENAME)
     try:
         with open(filepath) as fp:
             js = json.loads(fp.read())

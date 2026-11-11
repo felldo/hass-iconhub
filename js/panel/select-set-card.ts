@@ -3,8 +3,8 @@ import { customElement, property } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { renderIconHTML } from "../helpers";
 
-@customElement("custom-icons-icon")
-class CustomIconsIcon extends LitElement {
+@customElement("iconhub-icon")
+class IconHubIcon extends LitElement {
   @property() icon;
 
   render() {
@@ -12,15 +12,15 @@ class CustomIconsIcon extends LitElement {
   }
 }
 
-@customElement("custom-icons-select-set-card")
-export class CustomIconsSelectSetCard extends LitElement {
+@customElement("iconhub-select-set-card")
+export class IconHubSelectSetCard extends LitElement {
   @property() hass;
   @property() sets;
 
   async _toggle_set(prefix) {
     const state = this.sets[prefix].active;
     await this.hass.connection.sendMessage({
-      type: "custom_icons/select",
+      type: "iconhub/select",
       set: prefix,
       active: !state,
     });
@@ -57,9 +57,9 @@ export class CustomIconsSelectSetCard extends LitElement {
                   ${set.sample_icons
                     ? html` <div class="samples">
                         ${set.sample_icons?.map((i) => {
-                          return html`<custom-icons-icon
+                          return html`<iconhub-icon
                             .icon=${i}
-                          ></custom-icons-icon>`;
+                          ></iconhub-icon>`;
                         })}
                         ${set.sample_icons?.[0]?.renderer == "iconify"
                           ? html`
@@ -111,14 +111,14 @@ export class CustomIconsSelectSetCard extends LitElement {
       .samples * {
         vertical-align: bottom;
       }
-      custom-icons-icon {
+      iconhub-icon {
         fill: currentColor;
         font-size: 2.5em;
         vertical-align: top;
         margin-right: 4px;
         transition: font-size 0.2s;
       }
-      custom-icons-icon:hover {
+      iconhub-icon:hover {
         color: var(--accent-color);
       }
     `;

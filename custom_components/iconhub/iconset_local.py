@@ -12,7 +12,7 @@ from .iconset_base import (
     IconListItem,
     process_svg,
 )
-from .const import DOMAIN, ICON_PATH
+from .const import DOMAIN, icon_dir
 
 LOGGER = logging.getLogger(__name__)
 
@@ -71,7 +71,7 @@ class LocalSet(IconSetCollection):
         if self.cache:
             return self.cache
 
-        icon_path = hass.config.path(ICON_PATH)
+        icon_path = icon_dir(hass)
 
         loop = asyncio.get_running_loop()
 
@@ -87,7 +87,7 @@ class LocalSet(IconSetCollection):
 
         # abspath (not realpath), so symlinks placed in the icon directory on
         # purpose keep working, while "..", and absolute names are rejected.
-        root = os.path.abspath(hass.config.path(ICON_PATH))
+        root = os.path.abspath(icon_dir(hass))
         icon_path = os.path.abspath(os.path.join(root, icon + ".svg"))
 
         # The icon name comes from the websocket API, which any logged in user
