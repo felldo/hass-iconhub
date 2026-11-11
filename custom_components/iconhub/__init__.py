@@ -1,10 +1,15 @@
 import logging
 import os
 
+from homeassistant.helpers import config_validation as cv
+
 from .const import DOMAIN, ICON_PATH, LEGACY_ICON_PATH
 from .frontend import async_register_iconhub_frontend
 
 LOGGER = logging.getLogger(__name__)
+
+# Configured through the UI only - no YAML configuration
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 def _setup_icon_dir(hass) -> str:
