@@ -5,16 +5,24 @@ import { customElement, property, query } from "lit/decorators.js";
 export class CustomIconsDownloadCard extends LitElement {
   @property() hass;
 
+  @property() download_error?: string;
+
   @query("#download-button") download_button;
 
   async _download_iconify() {
     this.dispatchEvent(new Event("clear"));
     this.download_button.disabled = true;
-    await this.hass.connection.sendMessagePromise({
-      type: "custom_icons/iconify_download",
-    });
-    this.dispatchEvent(new Event("reload"));
-    this.download_button.disabled = false;
+    this.download_error = undefined;
+    try {
+      await this.hass.connection.sendMessagePromise({
+        type: "custom_icons/iconify_download",
+      });
+    } catch (err) {
+      this.download_error = err?.message ?? String(err);
+    } finally {
+      this.dispatchEvent(new Event("reload"));
+      this.download_button.disabled = false;
+    }
   }
 
   async _flush_icons() {
@@ -78,6 +86,11 @@ export class CustomIconsDownloadCard extends LitElement {
               >Download</ha-button
             >
           </ha-settings-row>
+          ${this.download_error
+            ? html`<ha-alert alert-type="error" title="Download failed">
+                ${this.download_error}
+              </ha-alert>`
+            : ""}
         </div>
       </ha-card>
     `;

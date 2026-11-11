@@ -27,40 +27,56 @@ def get_data_file(hass: HomeAssistant) -> dict:
         return None
 
 
+def _load_icons(hass: HomeAssistant) -> dict | None:
+    """Read fontawesome.json once and keep only what is needed.
+
+    Returns {"lists": {style: [IconListItem]}, "svgs": {style: {name: svg}}}.
+    The metadata file is large, so everything else in it (unicode values,
+    labels, changes, ...) is dropped instead of being kept in memory.
+    """
+    datafile = get_data_file(hass)
+    if not datafile:
+        return None
+
+    lists = defaultdict(list)
+    svgs = defaultdict(dict)
+    for name, v in datafile.items():
+        for style in v.get("styles", []):
+            lists[style].append(
+                {
+                    "name": name,
+                    "keywords": list(map(str, v.get("search", {}).get("terms", []))),
+                }
+            )
+        for style, svg in v.get("svg", {}).items():
+            svgs[style][name] = svg
+    return {"lists": dict(lists), "svgs": dict(svgs)}
+
+
 class FontawesomeSets(IconSetCollection):
 
     def __init__(self):
         self.cache: dict[str, IconSetInfo] = {}
-        self.list_cache = None
+        self.data_task: asyncio.Future | None = None
 
     def flush(self) -> None:
         self.cache = {}
-        self.list_cache = None
+        self.data_task = None
 
-    async def process_icons(self, hass: HomeAssistant):
-        if self.list_cache:
-            return self.list_cache
-
-        config = hass.config_entries.async_entries(DOMAIN)
-        config = config[0] if config else {}
-
-        loop = asyncio.get_running_loop()
-        datafile = await loop.run_in_executor(None, get_data_file, hass)
-        if not datafile:
-            return
-
-        self.list_cache = defaultdict(list)
-        for k, v in datafile.items():
-            for style in v.get("styles", []):
-                self.list_cache[style].append(
-                    {
-                        "name": k,
-                        "keywords": list(
-                            map(str, v.get("search", {}).get("terms", []))
-                        ),
-                    }
-                )
-        return self.list_cache
+    async def data(self, hass: HomeAssistant) -> dict | None:
+        # Previously the whole fontawesome.json was read and parsed again for
+        # every single icon. With the frontend loading icons in parallel that
+        # meant many full parses at once. Now it is loaded once, and concurrent
+        # requests share the same loading task.
+        if self.data_task is None:
+            self.data_task = hass.async_add_executor_job(_load_icons, hass)
+        task = self.data_task
+        try:
+            return await asyncio.shield(task)
+        except Exception:
+            if self.data_task is task:
+                self.data_task = None
+            raise
 
     async def sets(self, hass: HomeAssistant) -> dict[str, IconSetInfo]:
 
@@ -70,14 +86,14 @@ class FontawesomeSets(IconSetCollection):
         config = hass.config_entries.async_entries(DOMAIN)
         config = config[0] if config else {}
 
-        data = await self.process_icons(hass)
+        data = await self.data(hass)
         if not data:
             return {}
 
-        for k, v in data.items():
+        for k, v in data["lists"].items():
             prefix = PREPREFIX + k
 
-            samples = random.sample(v, 6)
+            samples = random.sample(v, min(6, len(v)))
             samples = [await self.icon(hass, prefix, icon["name"]) for icon in samples]
 
             self.cache[prefix] = {
@@ -100,12 +116,12 @@ class FontawesomeSets(IconSetCollection):
 
         style = prefix.removeprefix(PREPREFIX)
 
-        data = await self.process_icons(hass)
+        data = await self.data(hass)
 
         if not data:
             return []
 
-        return data[style]
+        return data["lists"].get(style, [])
 
     async def icon(
         self, hass: HomeAssistant, prefix: str, icon: str
@@ -113,13 +129,12 @@ class FontawesomeSets(IconSetCollection):
 
         style = prefix.removeprefix(PREPREFIX)
 
-        loop = asyncio.get_running_loop()
-        datafile = await loop.run_in_executor(None, get_data_file, hass)
+        data = await self.data(hass)
 
-        if not datafile:
+        if not data:
             return None
 
-        svg = datafile.get(icon, {}).get("svg", {}).get(style)
+        svg = data["svgs"].get(style, {}).get(icon)
         if not svg:
             return None
 

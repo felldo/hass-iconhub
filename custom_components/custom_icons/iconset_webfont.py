@@ -16,11 +16,6 @@ from .const import DOMAIN, ICON_PATH
 LOGGER = logging.getLogger(__name__)
 
 
-def read_file(path: str) -> str:
-    with open(path) as fp:
-        return fp.read()
-
-
 def list_files(root: str):
     set_list = []
     for dirpath, dirnames, filenames in os.walk(root):
@@ -31,8 +26,36 @@ def list_files(root: str):
     return set_list
 
 
-def _process_icon(glyph, size):
-    path = glyph.getAttribute("d")
+def _load_fonts(root: str) -> dict:
+    """Parse all webfont files once.
+
+    Returns {prefix: {"size": int, "glyphs": {glyph-name: path}}}.
+    """
+    fonts = {}
+    for filename in list_files(root):
+        try:
+            doc = minidom.parse(filename)
+        except Exception as err:
+            LOGGER.error("Could not parse webfont %s: %s", filename, err)
+            continue
+        for font in doc.getElementsByTagName("font"):
+            prefix = font.getAttribute("id")
+            size = (
+                int(font.getAttribute("horiz-adv-x"))
+                if font.hasAttribute("horiz-adv-x")
+                else 1000
+            )
+            glyphs = {
+                g.getAttribute("glyph-name"): g.getAttribute("d")
+                for g in font.getElementsByTagName("glyph")
+                if g.getAttribute("glyph-name")
+            }
+            fonts[prefix] = {"size": size, "glyphs": glyphs}
+        doc.unlink()
+    return fonts
+
+
+def _process_icon(path, size):
     return {
         "renderer": None,
         "viewBox": [0, 0, size, size],
@@ -47,83 +70,63 @@ def _process_icon(glyph, size):
 class WebfontSets(IconSetCollection):
 
     def __init__(self):
-        self.cache = {}
+        self.data_task: asyncio.Future | None = None
 
     def flush(self) -> None:
-        self.cache = {}
+        self.data_task = None
+
+    async def data(self, hass: HomeAssistant) -> dict:
+        # Previously the whole webfont file was read and parsed again for every
+        # single icon (and for every icon list). Now all fonts are parsed once,
+        # and concurrent requests share the same loading task.
+        if self.data_task is None:
+            self.data_task = hass.async_add_executor_job(
+                _load_fonts, hass.config.path(ICON_PATH)
+            )
+        task = self.data_task
+        try:
+            return await asyncio.shield(task)
+        except Exception:
+            if self.data_task is task:
+                self.data_task = None
+            raise
 
     async def sets(self, hass: HomeAssistant) -> dict[str, IconSetInfo]:
-
-        if self.cache:
-            return self.cache
 
         config = hass.config_entries.async_entries(DOMAIN)
         config = config[0] if config else {}
 
-        icon_path = hass.config.path(ICON_PATH)
+        fonts = await self.data(hass)
 
-        loop = asyncio.get_running_loop()
-        fonts = await loop.run_in_executor(None, list_files, icon_path)
+        sets = {}
+        for prefix, font in fonts.items():
+            names = list(font["glyphs"].keys())
+            samples = random.sample(names, min(6, len(names)))
+            sets[prefix] = {
+                "name": prefix,
+                "prefix": prefix,
+                "total": len(names),
+                "active": config.data.get(prefix, False),
+                "sample_icons": [
+                    _process_icon(font["glyphs"][n], font["size"]) for n in samples
+                ],
+            }
 
-        for f in fonts:
-            data = await loop.run_in_executor(None, read_file, f)
-            if hasattr(data, "decode"):
-                data.decode("utf-8")
-            s = minidom.parseString(str(data))
-            for font in s.getElementsByTagName("font"):
-                prefix = font.getAttribute("id")
-                glyphs = font.getElementsByTagName("glyph")
-                size = (
-                    int(font.getAttribute("horiz-adv-x"))
-                    if font.hasAttribute("horiz-adv-x")
-                    else 1000
-                )
-
-                samples = random.sample(glyphs, min(6, len(glyphs)))
-                samples = [_process_icon(icon, size) for icon in samples]
-
-                self.cache[prefix] = {
-                    "name": prefix,
-                    "prefix": prefix,
-                    "total": len(glyphs),
-                    "active": config.data.get(prefix, False),
-                    "sample_icons": samples,
-                    "filename": f,
-                    "size": size,
-                }
-
-        return self.cache
+        return sets
 
     async def prefixes(self, hass: HomeAssistant) -> list[str]:
-        sets = await self.sets(hass)
-
-        return list(sets.keys())
+        return list((await self.data(hass)).keys())
 
     async def list(self, hass: HomeAssistant, prefix: str) -> list[IconListItem]:
-
-        sets = await self.sets(hass)
-
-        loop = asyncio.get_running_loop()
-        data = await loop.run_in_executor(None, read_file, sets[prefix]["filename"])
-        s = minidom.parseString(str(data))
-
-        return [
-            {"name": g.getAttribute("glyph-name")}
-            for g in s.getElementsByTagName("glyph")
-        ]
+        font = (await self.data(hass)).get(prefix)
+        if not font:
+            return []
+        return [{"name": name} for name in font["glyphs"]]
 
     async def icon(
         self, hass: HomeAssistant, prefix: str, icon: str
     ) -> IconData | None:
-
-        sets = await self.sets(hass)
-
-        loop = asyncio.get_running_loop()
-        data = await loop.run_in_executor(None, read_file, sets[prefix]["filename"])
-        s = minidom.parseString(str(data))
-
-        for g in s.getElementsByTagName("glyph"):
-            if g.getAttribute("glyph-name") == icon:
-                return _process_icon(g, sets[prefix]["size"])
-
-        return None
+        font = (await self.data(hass)).get(prefix)
+        if not font or icon not in font["glyphs"]:
+            return None
+        return _process_icon(font["glyphs"][icon], font["size"])

@@ -20,9 +20,8 @@ ICONIFY_REPO_URL = "https://github.com/iconify/icon-sets/archive/refs/heads/mast
 ICONIFY_REPO_FILENAME = "iconify-icon-sets-master.zip"
 
 
-def _save_file(path: str, data: str | bytes):
-    with open(path, "wb") as fp:
-        fp.write(data)
+DOWNLOAD_TIMEOUT = aiohttp.ClientTimeout(total=None, connect=30, sock_read=60)
+DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 
 
 def _load_file(path: str) -> zipfile.ZipFile:
@@ -34,27 +33,95 @@ def _load_json(path: zipfile.Path) -> dict:
         return json.load(fp)
 
 
+def _finish_download(tmp: str, target: str):
+    if not zipfile.is_zipfile(tmp):
+        raise ValueError("Downloaded Iconify archive is not a valid zip file")
+    # Atomic: a failed or interrupted download never replaces a working archive
+    os.replace(tmp, target)
+
+
+def _remove_file(path: str):
+    try:
+        os.remove(path)
+    except FileNotFoundError:
+        pass
+
+
 async def download_data(hass: HomeAssistant, force: bool = False):
 
     targetpath = hass.config.path(ICON_PATH)
-    target = targetpath + "/" + ICONIFY_REPO_FILENAME
-
-    if os.path.isfile(target) and not force:
-        return target
+    target = os.path.join(targetpath, ICONIFY_REPO_FILENAME)
 
     if not force:
+        exists = await hass.async_add_executor_job(os.path.isfile, target)
+        return target if exists else None
+
+    session = async_get_clientsession(hass)
+    tmp = target + ".part"
+
+    try:
+        async with session.get(ICONIFY_REPO_URL, timeout=DOWNLOAD_TIMEOUT) as response:
+            response.raise_for_status()
+            # Streamed to disk - the archive is far too large to buffer in memory
+            fp = await hass.async_add_executor_job(open, tmp, "wb")
+            try:
+                async for chunk in response.content.iter_chunked(DOWNLOAD_CHUNK_SIZE):
+                    await hass.async_add_executor_job(fp.write, chunk)
+            finally:
+                await hass.async_add_executor_job(fp.close)
+        await hass.async_add_executor_job(_finish_download, tmp, target)
+    except BaseException:
+        await hass.async_add_executor_job(_remove_file, tmp)
+        raise
+
+    return target
+
+
+def _resolve_icon(datafile: dict, name: str) -> dict | None:
+    """Find an icon by name, following alias chains (aliases -> parent)."""
+    icons = datafile.get("icons", {})
+    aliases = datafile.get("aliases", {})
+
+    chain = []
+    while name not in icons:
+        alias = aliases.get(name)
+        if not alias or len(chain) > 36:  # Unknown name or circular aliases
+            return None
+        chain.append(alias)
+        name = alias.get("parent")
+
+    result = dict(icons[name])
+    # Apply transformations from the alias closest to the parent outwards
+    for alias in reversed(chain):
+        for key, value in alias.items():
+            if key == "parent":
+                continue
+            if key == "rotate":
+                result["rotate"] = (result.get("rotate", 0) + value) % 4
+            elif key in ("hFlip", "vFlip"):
+                result[key] = result.get(key, False) != value
+            else:
+                result[key] = value
+    return result
+
+
+def _icon_data(datafile: dict, icon: str) -> IconData | None:
+    resolved = _resolve_icon(datafile, icon)
+    if not resolved:
         return None
 
-    session = aiohttp.ClientSession = async_get_clientsession(hass)
-
-    request = await session.get(url=ICONIFY_REPO_URL)
-    if request.status == 200:
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, _save_file, target, await request.read())
-
-        return target
-
-    return None
+    icon_data = {
+        "renderer": "iconify",
+        "left": datafile.get("left", 0),
+        "top": datafile.get("top", 0),
+        "width": datafile.get("width", 16),
+        "height": datafile.get("height", 16),
+        "rotate": datafile.get("rotate", 0),
+        "vFlip": datafile.get("vFlip", False),
+        "hFlip": datafile.get("hFlip", False),
+    }
+    icon_data.update(resolved)
+    return icon_data
 
 
 async def _get_data_files(hass: HomeAssistant) -> zipfile.Path:
@@ -93,10 +160,13 @@ class IconifySets(IconSetCollection):
             self.data_cache[prefix] = hass.async_create_task(
                 self._load_data(hass, prefix)
             )
+        task = self.data_cache[prefix]
         try:
-            return await asyncio.shield(self.data_cache[prefix])
+            return await asyncio.shield(task)
         except Exception:
-            self.data_cache.pop(prefix, None)
+            # Only drop our own task - a flush may already have replaced it
+            if self.data_cache.get(prefix) is task:
+                self.data_cache.pop(prefix, None)
             raise
 
     async def _load_data(self, hass, prefix):
@@ -131,10 +201,13 @@ class IconifySets(IconSetCollection):
                 icons = list(js.get("icons", {}).keys())
                 if len(icons):
                     samples = random.sample(icons, min(6, len(icons)))
-            samples = [await self.icon(hass, prefix, icon) for icon in samples]
+            # Built from the already loaded file. Going through self.icon()
+            # would load every set a second time and keep all of them in
+            # data_cache, i.e. in memory, until the next restart.
+            samples = [_icon_data(js, icon) for icon in samples]
 
             self.cache[prefix] = {
-                **js["info"],
+                **js.get("info", {}),
                 "prefix": prefix,
                 "active": config.data.get(prefix, False),
                 "sample_icons": samples,
@@ -175,19 +248,7 @@ class IconifySets(IconSetCollection):
 
         datafile = await self.data(hass, prefix)
 
-        if not datafile or not datafile.get("icons", {}).get(icon, None):
+        if not datafile:
             return None
 
-        icon_data = {
-            "renderer": "iconify",
-            "left": datafile.get("left", 0),
-            "top": datafile.get("top", 0),
-            "width": datafile.get("width", 16),
-            "height": datafile.get("height", 16),
-            "rotate": datafile.get("rotate", 0),
-            "vFlip": datafile.get("vFlip", False),
-            "hFlip": datafile.get("hFlip", False),
-        }
-        icon_data.update(datafile.get("icons", {}).get(icon, {}))
-
-        return icon_data
+        return _icon_data(datafile, icon)

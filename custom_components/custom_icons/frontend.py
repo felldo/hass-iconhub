@@ -191,7 +191,19 @@ async def ws_download_iconify_sets(
     msg: dict,
 ):
     """Download iconify icons"""
-    await iconset_iconify.download_data(hass, True)
+    try:
+        await iconset_iconify.download_data(hass, True)
+    except Exception as err:
+        LOGGER.error("Downloading Iconify icon sets failed: %s", err)
+        connection.send_error(msg["id"], "download_failed", str(err))
+        return
+    finally:
+        # Drop everything loaded from the previous archive (or the cached
+        # "no archive yet" result on the first download)
+        for collection in collections:
+            collection.flush()
+        icon_cache.clear()
+
     connection.send_result(msg["id"])
 
 
