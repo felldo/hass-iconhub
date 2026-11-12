@@ -108,6 +108,9 @@ export class IconHubSelectSetCard extends LitElement {
   @state() error?: string;
 
   async _toggle_set(prefix, ev) {
+    // Taken right away: event.target is reset to null once dispatching ends,
+    // because the switch is inside a shadow root
+    const toggle = ev.target;
     const state = this.sets[prefix].active;
     this.busy = { ...this.busy, [prefix]: true };
     this.error = undefined;
@@ -120,7 +123,7 @@ export class IconHubSelectSetCard extends LitElement {
       });
       this.sets[prefix].active = !state;
     } catch (err) {
-      ev.target.checked = state; // Flip the switch back
+      toggle.checked = state; // Flip the switch back
       this.error = `${prefix}: ${err?.message ?? String(err)}`;
     } finally {
       this.busy = { ...this.busy, [prefix]: false };
