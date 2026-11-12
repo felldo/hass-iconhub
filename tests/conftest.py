@@ -284,6 +284,21 @@ def call(hass):
     return _call
 
 
+@pytest.fixture(autouse=True)
+def frontend_files(tmp_path, monkeypatch):
+    """Stand-ins for the built loader.js / panel.js.
+
+    The real files only exist after `npm run build`, which the Python tests
+    must not depend on.
+    """
+    from iconhub import frontend
+
+    for name, attr in (("loader.js", "LOADER_JS"), ("panel.js", "PANEL_JS")):
+        path = tmp_path / f"built-{name}"
+        path.write_text(f"// {name}")
+        monkeypatch.setattr(frontend, attr, str(path))
+
+
 @pytest.fixture
 async def entry(hass, iconify_server):
     """A loaded IconHub entry with "local" and "set-a" enabled."""
