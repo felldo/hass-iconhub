@@ -1,4 +1,6 @@
 {
   "name": "IconHub",
-  "homeassistant": "2024.7.0"
+  "homeassistant": "2024.7.0",
+  "zip_release": true,
+  "filename": "iconhub.zip"
 }

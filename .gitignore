@@ -2,3 +2,7 @@ node_modules/
 **/__pycache__
 test/iconhub/*
 !test/iconhub/.nodelete
+# Built by "npm run build" (attached to releases as iconhub.zip)
+custom_components/iconhub/loader.js
+custom_components/iconhub/panel.js
+.idea/

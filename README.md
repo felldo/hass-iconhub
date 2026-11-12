@@ -11,6 +11,12 @@ Use your own SVG icons, Iconify icon sets, Fontawesome Pro and SVG webfonts in H
 - Click this [![Open your Home Assistant instance and start setting up a new integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=iconhub)
   - Alternatively, go to your integrations configuration, click "Add Integration" and find "IconHub"
 
+### Manual installation
+
+Download `iconhub.zip` from the [latest release](https://github.com/felldo/hass-iconhub/releases/latest), extract it to `<config>/custom_components/iconhub/` and restart Home Assistant.
+
+> The repository itself doesn't contain the built frontend files (`loader.js`, `panel.js`), so copying `custom_components/iconhub` from the source code doesn't work. See [Development](#development).
+
 ## Usage
 
 - Go to your integrations configuration, click "IconHub" and then "CONFIGURE".
@@ -116,3 +122,20 @@ IconHub doesn't use the large `iconify-icon-sets-master.zip` archive Custom Icon
 ### Do I need all that `#fullcolor` nonsense from `hass-fontawesome`?
 
 No
+
+## Development
+
+The frontend is written in TypeScript (`js/`) and built with Rollup into `custom_components/iconhub/loader.js` and `panel.js`. The built files are not committed; releases get them through the release workflow, which attaches `iconhub.zip` to every GitHub release.
+
+```sh
+npm ci
+npm run build        # or: npm run watch
+npm test             # frontend tests (needs a build)
+
+pip install -r requirements_test.txt
+python -m pytest     # backend tests
+```
+
+The backend tests replace the parts of Home Assistant that IconHub uses with small stand-ins (see `tests/conftest.py`), so they run without a Home Assistant installation.
+
+To release, publish a GitHub release with a tag like `v2.1.0`. The workflow builds the frontend, runs all tests, sets the version in `manifest.json` from the tag and uploads `iconhub.zip`.
