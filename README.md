@@ -72,7 +72,11 @@ Make sure the "Local" collection is enabled, and they will then be available usi
 
 When you enable an Iconify icon set, IconHub downloads just that set from the [Iconify icon-sets repository](https://github.com/iconify/icon-sets) and stores it in `<config>/iconhub/iconify/`. The previews in the configuration panel are loaded by your browser from the Iconify API.
 
-The icon sets are updated frequently. Use the UPDATE button in the IconHub configuration panel to download the latest version of all enabled sets.
+The icon sets are updated frequently. IconHub updates the list of icon sets and all enabled sets automatically every 7 days. You can change the number of days or turn automatic updates off in the configuration panel, which also shows when the last update happened, when the next one is due and when each enabled set was downloaded.
+
+Use the UPDATE button to download the latest version of all enabled sets right away. If an update fails, IconHub keeps the previous files and tries again a day later.
+
+When you open the configuration panel (or push CHECK), IconHub compares the enabled sets with the latest list of icon sets and shows which ones have a newer version or more icons. Only the list is downloaded for that. After an update, the panel lists the new, changed and removed icons of every set that changed. Each set links to its history in the Iconify repository.
 
 ### Fontawesome Pro icons
 

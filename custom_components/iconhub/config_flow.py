@@ -2,7 +2,16 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 
-from .const import CONF_ENABLED_SETS, DEFAULT_ENABLED_SETS, DOMAIN, LEGACY_DOMAIN
+from .const import (
+    CONF_AUTO_UPDATE,
+    CONF_ENABLED_SETS,
+    CONF_UPDATE_INTERVAL,
+    DEFAULT_AUTO_UPDATE,
+    DEFAULT_ENABLED_SETS,
+    DEFAULT_UPDATE_INTERVAL,
+    DOMAIN,
+    LEGACY_DOMAIN,
+)
 
 
 class IconHubConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -21,5 +30,9 @@ class IconHubConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_create_entry(
             title="IconHub",
             data={},
-            options={CONF_ENABLED_SETS: enabled},
+            options={
+                CONF_ENABLED_SETS: enabled,
+                CONF_AUTO_UPDATE: DEFAULT_AUTO_UPDATE,
+                CONF_UPDATE_INTERVAL: DEFAULT_UPDATE_INTERVAL,
+            },
         )

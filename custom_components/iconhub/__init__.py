@@ -12,6 +12,7 @@ from .frontend import (
     async_remove_entry_frontend,
 )
 from .runtime import IconHubConfigEntry, IconHubData, enabled_sets
+from .updater import async_setup_auto_update
 
 LOGGER = logging.getLogger(__name__)
 
@@ -57,6 +58,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: IconHubConfigEntry) -> b
         data.iconify.ensure_downloaded(hass, enabled_sets(entry)),
         "iconhub_iconify_download",
     )
+    async_setup_auto_update(hass, entry)
     return True
 
 

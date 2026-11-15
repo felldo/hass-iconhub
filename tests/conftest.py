@@ -64,6 +64,8 @@ class HAState:
         self.removed_panels = []
         self.js_urls = set()
         self.session = None
+        # Timers: [hass, action, interval, removed]
+        self.intervals = []
 
 
 HA = HAState()
@@ -92,6 +94,19 @@ _module(
     config_entry_only_config_schema=lambda domain: None,
 )
 _module("homeassistant.helpers.typing", ConfigType=dict)
+
+
+def _track_time_interval(hass, action, interval):
+    timer = [hass, action, interval, False]
+    HA.intervals.append(timer)
+
+    def remove():
+        timer[3] = True
+
+    return remove
+
+
+_module("homeassistant.helpers.event", async_track_time_interval=_track_time_interval)
 _ws = _module(
     "homeassistant.components.websocket_api",
     websocket_command=lambda schema: _identity,
@@ -124,6 +139,15 @@ class FakeEntry:
         self.options = options or {}
         self.state = ConfigEntryState.NOT_LOADED
         self.tasks = []
+        self.on_unload = []
+
+    def async_on_unload(self, func):
+        self.on_unload.append(func)
+
+    def run_on_unload(self):
+        """What Home Assistant does after async_unload_entry."""
+        while self.on_unload:
+            self.on_unload.pop()()
 
     def async_create_background_task(self, hass, coro, name):
         task = asyncio.get_running_loop().create_task(coro, name=name)
@@ -215,7 +239,10 @@ class IconifyServer:
         self.requests = []
         self.mode = "ok"
         self.delay = 0
+        # set-a carries version "1.<version>" and an icon named v<version>
         self.version = 1
+        # Replaces the body of icon "a" of set-a
+        self.body_a = None
 
     def count(self, name):
         return self.requests.count(name)
@@ -233,12 +260,20 @@ class IconifyServer:
         if self.mode == "setsgarbage" and is_set:
             return web.Response(body=b"[1, 2]")
         if not is_set:
-            return web.json_response(COLLECTIONS)
+            collections = json.loads(json.dumps(COLLECTIONS))
+            collections["set-a"]["version"] = f"1.{self.version}"
+            return web.json_response(collections)
         sets = {"set-a.json": SET_A, "set-b.json": SET_B, "old-set.json": SET_B}
         if name not in sets:
             return web.Response(status=404)
         data = json.loads(json.dumps(sets[name]))
         data["icons"][f"v{self.version}"] = {"body": ""}
+        if name == "set-a.json":
+            data["info"] = {"name": "Set A", "total": 1, "version": f"1.{self.version}"}
+            if self.body_a:
+                data["icons"]["a"]["body"] = self.body_a
+        else:
+            data["info"] = {"name": "Set B", "total": 1}
         return web.json_response(data)
 
 

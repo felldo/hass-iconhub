@@ -13,8 +13,17 @@ from homeassistant.components.frontend import (
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.core import HomeAssistant, callback
 
-from .const import CONF_ENABLED_SETS, DOMAIN, PANEL_URL_PATH
+from .const import (
+    CONF_AUTO_UPDATE,
+    CONF_ENABLED_SETS,
+    CONF_UPDATE_INTERVAL,
+    DOMAIN,
+    MAX_UPDATE_INTERVAL,
+    MIN_UPDATE_INTERVAL,
+    PANEL_URL_PATH,
+)
 from .runtime import IconHubConfigEntry, enabled_sets, get_loaded_entry
+from .updater import async_check_iconify, async_get_status, async_update_iconify
 
 LOGGER = logging.getLogger(__name__)
 
@@ -242,15 +251,12 @@ async def ws_update_iconify_sets(
     """Refresh the list of Iconify sets and re-download all enabled sets"""
     if not (entry := _entry_or_error(hass, connection, msg)):
         return
-    data = entry.runtime_data
     try:
-        failed = await data.iconify.update(hass, enabled_sets(entry))
+        failed = await async_update_iconify(hass, entry)
     except Exception as err:
         LOGGER.error("Updating Iconify icon sets failed: %s", err)
         connection.send_error(msg["id"], "download_failed", str(err))
         return
-    finally:
-        data.flush()
 
     if failed:
         connection.send_error(
@@ -260,6 +266,68 @@ async def ws_update_iconify_sets(
         )
         return
     connection.send_result(msg["id"])
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/iconify_status"})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_get_iconify_status(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict,
+):
+    """Last and next update of the Iconify sets, and the auto update option"""
+    if entry := _entry_or_error(hass, connection, msg):
+        connection.send_result(msg["id"], await async_get_status(hass, entry))
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/auto_update",
+        vol.Optional("enabled"): bool,
+        vol.Optional("interval"): vol.All(
+            int, vol.Range(min=MIN_UPDATE_INTERVAL, max=MAX_UPDATE_INTERVAL)
+        ),
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_set_auto_update(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict,
+):
+    """Turn the automatic update on or off, or set its interval in days"""
+    if not (entry := _entry_or_error(hass, connection, msg)):
+        return
+    options = dict(entry.options)
+    if "enabled" in msg:
+        options[CONF_AUTO_UPDATE] = msg["enabled"]
+    if "interval" in msg:
+        options[CONF_UPDATE_INTERVAL] = msg["interval"]
+    # No update listener: the options are read on every automatic check
+    hass.config_entries.async_update_entry(entry, options=options)
+    connection.send_result(msg["id"], await async_get_status(hass, entry))
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/iconify_check"})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_check_iconify_sets(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict,
+):
+    """Which enabled Iconify sets have a newer version (nothing is stored)"""
+    if not (entry := _entry_or_error(hass, connection, msg)):
+        return
+    try:
+        result = await async_check_iconify(hass, entry)
+    except Exception as err:
+        LOGGER.debug("Checking for Iconify updates failed: %s", err)
+        connection.send_error(msg["id"], "download_failed", str(err))
+        return
+    connection.send_result(msg["id"], result)
 
 
 @websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/flush_icons"})
@@ -286,6 +354,9 @@ async def async_register_frontend(hass: HomeAssistant) -> None:
         ws_get_icon,
         ws_get_cached_icons,
         ws_update_iconify_sets,
+        ws_get_iconify_status,
+        ws_set_auto_update,
+        ws_check_iconify_sets,
         ws_flush_icons,
     ):
         websocket_api.async_register_command(hass, command)

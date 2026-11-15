@@ -70,3 +70,19 @@ export const renderIconHTML = (icon) => {
 
   return iconToHTML(icn.innerSVG, icn.attributes);
 };
+
+// Commit history of one set in the Iconify icon-sets repository
+export const historyUrl = (prefix: string) =>
+  `https://github.com/iconify/icon-sets/commits/master/json/${prefix}.json`;
+
+// Unix time (seconds) as date and time in the user's language
+export const formatTime = (hass, seconds?: number | null) =>
+  seconds
+    ? new Date(seconds * 1000).toLocaleString(hass?.locale?.language, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "never";

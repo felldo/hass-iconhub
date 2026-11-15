@@ -1,7 +1,7 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
-import { renderIconHTML } from "../helpers";
+import { formatTime, historyUrl, renderIconHTML } from "../helpers";
 
 @customElement("iconhub-icon")
 class IconHubIcon extends LitElement {
@@ -168,6 +168,12 @@ export class IconHubSelectSetCard extends LitElement {
                           </a>`
                       : ""}
                   </div>
+                  ${set.active && set.downloaded
+                    ? html`<div class="downloaded">
+                        Downloaded ${formatTime(this.hass, set.downloaded)} -
+                        <a href=${historyUrl(prefix)} target="_blank">History</a>
+                      </div>`
+                    : ""}
                   ${set.sample_names?.length
                     ? html`<div class="samples">
                         <iconhub-iconify-samples
@@ -229,6 +235,10 @@ export class IconHubSelectSetCard extends LitElement {
       }
       .prefix {
         font-family: monospace;
+      }
+      .downloaded {
+        font-size: 0.9em;
+        opacity: 0.7;
       }
       .prefix.active {
         color: var(--primary-color);

@@ -4,7 +4,12 @@ import os
 
 import iconhub
 from iconhub import config_flow
-from iconhub.const import CONF_ENABLED_SETS, DEFAULT_ENABLED_SETS
+from iconhub.const import (
+    CONF_AUTO_UPDATE,
+    CONF_ENABLED_SETS,
+    CONF_UPDATE_INTERVAL,
+    DEFAULT_ENABLED_SETS,
+)
 
 from conftest import HA, ConfigEntryState, FakeEntry, FakeHass
 
@@ -14,6 +19,8 @@ async def test_config_flow_defaults(hass):
     flow.hass = hass
     result = await flow.async_step_user()
     assert result["options"][CONF_ENABLED_SETS] == DEFAULT_ENABLED_SETS
+    assert result["options"][CONF_AUTO_UPDATE] is True
+    assert result["options"][CONF_UPDATE_INTERVAL] == 7
 
 
 async def test_config_flow_imports_custom_icons_sets(hass):
@@ -28,7 +35,7 @@ async def test_config_flow_imports_custom_icons_sets(hass):
 
 async def test_setup_registers_once(hass, call):
     assert await iconhub.async_setup(hass, {})
-    assert len(HA.commands) == 8
+    assert len(HA.commands) == 11
     assert len(HA.static_paths) == 2
     # Without a loaded entry the commands answer cleanly
     assert (await call("ws_get_active_sets")).result == []
@@ -53,6 +60,8 @@ async def test_unload_and_reload(hass, entry, call):
     assert await iconhub.async_unload_entry(hass, entry)
     assert js_url not in HA.js_urls
     assert HA.removed_panels == ["iconhub-config"]
+    entry.run_on_unload()
+    assert HA.intervals[0][3], "auto update timer not removed"
 
     entry.state = ConfigEntryState.NOT_LOADED
     assert (await call("ws_get_icon", set="local", icon="x")).error_code == "not_loaded"

@@ -1,5 +1,6 @@
 """State of a loaded IconHub config entry."""
 
+import asyncio
 from collections import defaultdict
 from dataclasses import dataclass, field
 
@@ -25,6 +26,8 @@ class IconHubData:
     icon_cache: defaultdict = field(default_factory=lambda: defaultdict(dict))
     # Loader URL added to the frontend, removed again on unload
     js_url: str | None = None
+    # Running Iconify update (by hand or automatic), shared by all callers
+    update_task: asyncio.Future | None = None
 
     @classmethod
     def create(cls, icon_dir: str) -> "IconHubData":
