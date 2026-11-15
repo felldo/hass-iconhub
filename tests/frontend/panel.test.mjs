@@ -263,6 +263,15 @@ const CHECK = {
       downloaded: 1700000000,
       update_available: true,
     },
+    "set-d": {
+      name: "Set D",
+      local_version: "2.0",
+      remote_version: "2.1",
+      local_total: 50,
+      remote_total: 50,
+      downloaded: 1700000000,
+      update_available: true,
+    },
     "set-c": {
       name: "Set C",
       local_version: null,
@@ -283,10 +292,12 @@ test("the check shows which sets have a newer version", async () => {
   const check = download.shadowRoot.querySelector("#check");
   assert.ok(check, "check result not shown");
   const text = check.textContent.replace(/\s+/g, " ");
-  assert.match(text, /Updates available for 1 of 2 enabled Iconify sets/);
+  assert.match(text, /Updates available for 2 of 3 enabled Iconify sets/);
+  // The icon count is shown even if only the version changed
+  assert.match(text, /Set D \(set-d:\) 2\.0 → 2\.1 · 50 icons History/);
   assert.match(text, /1\.1 \u2192 1\.2/);
   assert.match(text, /10 \u2192 45 icons \(\+35\)/);
-  assert.match(text, /Set C \(set-c:\) up to date/);
+  assert.match(text, /Set C \(set-c:\) 3 icons · up to date/);
   const links = [...check.querySelectorAll("a")].map((a) => a.getAttribute("href"));
   assert.ok(links.includes("https://github.com/iconify/icon-sets/commits/master/json/set-a.json"));
 

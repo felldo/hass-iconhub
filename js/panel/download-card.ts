@@ -221,15 +221,16 @@ export class IconHubDownloadCard extends LitElement {
     `;
   }
 
+  // Version and icon count, e.g. "3.51.0 → 3.52.0 · 6510 → 6545 icons (+35)"
   _check_text(set: SetCheck) {
-    if (!set.downloaded) return "not downloaded yet";
-    if (!set.update_available)
-      return set.local_version
-        ? `${set.local_version}, up to date`
-        : "up to date";
+    if (!set.downloaded)
+      return set.remote_total != null
+        ? `not downloaded yet · ${set.remote_total} icons`
+        : "not downloaded yet";
     const parts: string[] = [];
     if (set.remote_version && set.remote_version !== set.local_version)
       parts.push(`${set.local_version ?? "?"} → ${set.remote_version}`);
+    else if (set.local_version) parts.push(set.local_version);
     if (set.remote_total !== set.local_total) {
       const diff = (set.remote_total ?? 0) - (set.local_total ?? 0);
       parts.push(
@@ -238,8 +239,11 @@ export class IconHubDownloadCard extends LitElement {
             ? ` (${diff > 0 ? "+" : ""}${diff})`
             : "")
       );
+    } else if (set.local_total != null) {
+      parts.push(`${set.local_total} icons`);
     }
-    return parts.join(", ") || "update available";
+    if (!set.update_available) parts.push("up to date");
+    return parts.join(" · ") || "update available";
   }
 
   _render_changes() {
