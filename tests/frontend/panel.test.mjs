@@ -198,6 +198,9 @@ test("changing the interval sends auto_update with the days", async () => {
     "iconhub/auto_update": (msg) => ({ ...STATUS, update_interval: msg.interval }),
   });
   const field = download.shadowRoot.querySelector("#update-interval");
+  // A native input: HA elements like ha-textfield aren't always loaded in
+  // panels and then render as nothing
+  assert.equal(field.tagName, "INPUT");
   assert.equal(field.value, "7");
   field.value = "3";
   field.dispatchEvent(new download.ownerDocument.defaultView.Event("change"));

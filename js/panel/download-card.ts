@@ -412,17 +412,21 @@ export class IconHubDownloadCard extends LitElement {
           <ha-settings-row>
             <span slot="heading">Update Interval</span>
             <span slot="description">Days between automatic updates</span>
-            <ha-textfield
-              id="update-interval"
-              type="number"
-              min="1"
-              max="365"
-              step="1"
-              suffix="days"
-              .value=${String(this.status?.update_interval ?? 7)}
-              .disabled=${!this.status?.auto_update}
-              @change=${(ev) => this._set_interval(ev)}
-            ></ha-textfield>
+            <!-- A plain input: ha-textfield isn't always loaded in panels -->
+            <label class="interval">
+              <input
+                id="update-interval"
+                type="number"
+                min="1"
+                max="365"
+                step="1"
+                inputmode="numeric"
+                .value=${String(this.status?.update_interval ?? 7)}
+                .disabled=${!this.status?.auto_update}
+                @change=${(ev) => this._set_interval(ev)}
+              />
+              days
+            </label>
           </ha-settings-row>
           ${this.auto_update_error
             ? html`<ha-alert
@@ -445,9 +449,28 @@ export class IconHubDownloadCard extends LitElement {
         display: flex;
         justify-content: space-between;
       }
-      ha-textfield {
-        width: 120px;
-        display: block;
+      .interval {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--primary-text-color);
+      }
+      .interval input {
+        width: 5em;
+        padding: 8px;
+        font: inherit;
+        color: var(--primary-text-color);
+        background: var(--input-fill-color, var(--secondary-background-color));
+        border: 1px solid var(--divider-color);
+        border-bottom: 1px solid var(--input-idle-line-color, var(--secondary-text-color));
+        border-radius: 4px 4px 0 0;
+      }
+      .interval input:focus {
+        outline: none;
+        border-bottom: 2px solid var(--primary-color);
+      }
+      .interval input:disabled {
+        opacity: 0.5;
       }
       a {
         color: var(--primary-color);
