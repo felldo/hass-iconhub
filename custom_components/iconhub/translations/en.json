@@ -1,0 +1,7 @@
+{
+  "config": {
+    "abort": {
+      "single_instance_allowed": "IconHub is already set up. Only one instance is possible."
+    }
+  }
+}
