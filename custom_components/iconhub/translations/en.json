@@ -1,5 +1,11 @@
 {
   "config": {
+    "step": {
+      "user": {
+        "title": "Set up IconHub",
+        "description": "Adds IconHub to Home Assistant. You choose the icon sets afterwards in the IconHub panel."
+      }
+    },
     "abort": {
       "single_instance_allowed": "IconHub is already set up. Only one instance is possible."
     }
