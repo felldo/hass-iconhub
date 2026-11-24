@@ -14,7 +14,8 @@ const bundle = (input, file) => ({
     json(),
     typescript(),
     commonjs(),
-    !dev && terser({ format: { comments: false } }),
+    // "some" keeps license notices of bundled libraries
+    !dev && terser({ format: { comments: "some" } }),
   ],
 });
 

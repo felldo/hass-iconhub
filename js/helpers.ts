@@ -1,4 +1,5 @@
 import { iconToSVG, iconToHTML } from "@iconify/utils";
+import { sanitizeSVG } from "./sanitize";
 
 export async function hass_base_el() {
   await Promise.race([
@@ -59,7 +60,8 @@ export const renderIcon = (icon) => {
     secondaryPath: icon.path2 ?? "",
     viewBox: renderedIcon.viewBox,
     format: "iconhub",
-    innerSVG: renderedIcon.body,
+    // After iconToSVG, because that puts other values of the icon into the body
+    innerSVG: sanitizeSVG(renderedIcon.body),
     attributes: renderedIcon.attributes,
   };
 };
@@ -68,12 +70,18 @@ export const renderIconHTML = (icon) => {
   const icn = renderIcon(icon);
   if (!icn) return "";
 
-  return iconToHTML(icn.innerSVG, icn.attributes);
+  // iconToHTML doesn't escape the attributes
+  const viewBox = icn.attributes.viewBox.replace(/[^\d\s.,e+-]/gi, "");
+  return iconToHTML(icn.innerSVG, { ...icn.attributes, viewBox });
 };
 
 // Commit history of one set in the Iconify icon-sets repository
 export const historyUrl = (prefix: string) =>
   `https://github.com/iconify/icon-sets/commits/master/json/${prefix}.json`;
+
+// Link from a downloaded set, if it is safe to click (no "javascript:")
+export const webUrl = (url?: string) =>
+  /^https?:\/\//i.test(url ?? "") ? url : undefined;
 
 // Unix time (seconds) as date and time in the user's language
 export const formatTime = (hass, seconds?: number | null) =>

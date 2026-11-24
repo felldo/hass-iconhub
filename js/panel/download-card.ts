@@ -336,16 +336,10 @@ export class IconHubDownloadCard extends LitElement {
       <ha-card outlined>
         <h1 class="card-header">IconHub</h1>
         <div class="card-content">
-          <ha-alert alert-type="warning" title="Dangers of external SVG icons">
-            SVG icons can theoretically contain javascript and listeners or link
-            to external resources. <br />
-
-            Home Assistant normally protects against this, but in order to
-            enable advanced features such as duotone or color support
-            <b>that protection is disabled for all IconHub icons</b>. <br />
-
-            Iconify icons are allegedly validated and cleaned from any such
-            potentially harmful elements, but be careful. <br />
+          <ha-alert alert-type="info" title="Safety of external SVG icons">
+            SVG files can contain scripts, event listeners and links to external
+            resources. IconHub removes these from all icons before they are
+            shown. Images embedded in SVG files are removed as well. <br />
             <br />
 
             I as the author of this Home Assistant component take no

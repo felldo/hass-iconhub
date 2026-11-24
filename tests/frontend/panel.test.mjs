@@ -360,3 +360,52 @@ test("enabled sets link to their history", async () => {
     "https://github.com/iconify/icon-sets/commits/master/json/set-c.json"
   );
 });
+
+test("sample icons are sanitized", async () => {
+  const { card } = await setUp(() => null);
+  const sample = (extra) => ({
+    renderer: null,
+    viewBox: ["0", "0", "24", "24"],
+    path: "M1 1",
+    body: `<path d="M1 1"/>`,
+    ...extra,
+  });
+  card.sets = {
+    local: {
+      ...SETS.local,
+      sample_icons: [
+        sample({ body: `<path d="M1 1"/><image href="x" onerror="alert(1)"/>` }),
+        sample({ viewBox: ['0"><img', "src=x", 'onerror="alert(1)"><svg', 'x="'] }),
+        sample({ viewBox: ["0,0,24,24"] }),
+      ],
+    },
+  };
+  await sleep(50);
+  const icons = [...card.shadowRoot.querySelectorAll("iconhub-icon")];
+  assert.equal(icons.length, 3);
+  for (const { shadowRoot } of icons) {
+    assert.equal(
+      shadowRoot.querySelector("image, img, [onerror]"),
+      null,
+      shadowRoot.innerHTML
+    );
+    assert.ok(shadowRoot.querySelector("svg > path"), "icon not drawn");
+  }
+  const svg = icons[2].shadowRoot.querySelector("svg");
+  assert.equal(svg.getAttribute("viewBox"), "0,0,24,24");
+});
+
+test("only web links to authors are clickable", async () => {
+  const { card } = await setUp(() => null);
+  card.sets = {
+    "set-a": { ...SETS["set-a"], author: { name: "Evil", url: "javascript:alert(1)" } },
+    "set-c": { ...SETS["set-c"], author: { name: "Good", url: "https://example.com" } },
+  };
+  await sleep(50);
+  const links = [...card.shadowRoot.querySelectorAll("a")].map((a) =>
+    a.getAttribute("href")
+  );
+  assert.ok(!links.some((href) => /^javascript:/i.test(href)), links.join());
+  assert.ok(links.includes("https://example.com"));
+  assert.match(card.shadowRoot.textContent, /Evil/);
+});

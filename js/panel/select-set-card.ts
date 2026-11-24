@@ -1,7 +1,7 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
-import { formatTime, historyUrl, renderIconHTML } from "../helpers";
+import { formatTime, historyUrl, renderIconHTML, webUrl } from "../helpers";
 
 @customElement("iconhub-icon")
 class IconHubIcon extends LitElement {
@@ -162,10 +162,13 @@ export class IconHubSelectSetCard extends LitElement {
                   <div>
                     ${set.total} icons
                     ${set.author
-                      ? html`by ${set.author.name} -
-                          <a href="${set.author.url}" target="_blank">
-                            ${set.author.url}
-                          </a>`
+                      ? html`by
+                        ${set.author.name}${webUrl(set.author.url)
+                          ? html` -
+                              <a href="${set.author.url}" target="_blank">
+                                ${set.author.url}
+                              </a>`
+                          : ""}`
                       : ""}
                   </div>
                   ${set.active && set.downloaded

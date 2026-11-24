@@ -45,10 +45,10 @@ Make sure the "Local" collection is enabled, and they will then be available usi
 
 > **Note about safety:**
 >
-> SVG files may contain SVG and Javascript and shall be considered unsafe.
-> Home Assistant normally protects you from harmful code in SVG icons, but in order to make e.g. full color or animated icons work this protection has been removed by IconHub.
+> SVG files can contain scripts, event listeners and links to external resources.
+> Home Assistant only draws the paths of custom icons, which keeps all of that out, but also colors and animations. IconHub draws the whole SVG instead and removes everything that could run code or load something first (with [DOMPurify](https://github.com/cure53/DOMPurify)). Shapes, gradients, filters, styles and animations are kept; scripts, event listeners, links, `<image>`, `<foreignObject>` and references to anything outside of the icon are not.
 >
-> Only use icons you trust (and preferably have inspected the code for). The author of IconHub takes no responsibility for the contents of any icon set - not even those included in Iconify.
+> The author of IconHub takes no responsibility for the contents of any icon set - not even those included in Iconify.
 
 > **Note about colors:**
 >
