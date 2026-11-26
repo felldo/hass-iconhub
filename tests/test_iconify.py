@@ -134,6 +134,25 @@ async def test_prefix_validation(hass, entry):
         await iconify.download_set(hass, "not-listed")
 
 
+def test_prefix_with_trailing_newline_is_invalid():
+    from iconhub.iconset_iconify import valid_prefix
+
+    assert valid_prefix("mdi")
+    assert not valid_prefix("mdi\n")
+    assert not valid_prefix(None)
+
+
+def test_sample_names_are_filtered():
+    # They end up in URLs and inline styles in the panel
+    from iconhub.iconset_iconify import sample_names
+
+    hostile = "x);background:url(//evil.example/p);x:("
+    assert sample_names({"samples": ["a", hostile, "home-2", "B", 5, "a\n"]}) == ["a", "home-2"]
+    assert sample_names({"samples": "abc"}) == []
+    assert sample_names({}) == []
+    assert sample_names({"samples": [f"i{n}" for n in range(10)]}) == [f"i{n}" for n in range(6)]
+
+
 async def test_aiohttp_is_not_modified(entry, call):
     await call("ws_update_iconify_sets")
     assert aiohttp.ClientSession.__name__ == "ClientSession"

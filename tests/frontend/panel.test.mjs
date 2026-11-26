@@ -395,6 +395,27 @@ test("sample icons are sanitized", async () => {
   assert.equal(svg.getAttribute("viewBox"), "0,0,24,24");
 });
 
+test("sample names cannot add CSS to the previews", async () => {
+  const { card } = await setUp(() => null);
+  card.sets = {
+    "set-a": {
+      ...SETS["set-a"],
+      sample_names: ["x);background:url(https://evil.example/p);position:fixed;x:(", "a"],
+    },
+  };
+  await sleep(50);
+  const samples = card.shadowRoot.querySelector("iconhub-iconify-samples");
+  await sleep(20);
+  const masks = [...samples.shadowRoot.querySelectorAll(".mask")];
+  assert.equal(masks.length, 2);
+  for (const mask of masks) {
+    const style = mask.getAttribute("style");
+    // Only the two mask declarations, each with one quoted URL
+    assert.doesNotMatch(style, /[;:]\s*(background|position)|evil\.example\/p/, style);
+    assert.equal(style.match(/url\("https:\/\/api\.iconify\.design\/set-a\/[^"]*"\)/g)?.length, 2, style);
+  }
+});
+
 test("only web links to authors are clickable", async () => {
   const { card } = await setUp(() => null);
   card.sets = {

@@ -97,6 +97,14 @@ class LocalSet(IconSetCollection):
             LOGGER.warning("Refusing to load local icon outside %s: %s", root, icon)
             return None
 
+        # Only the plain spelling of a name ("sub/icon", not "./sub/icon" or
+        # "x/../sub/icon"). Results are cached by name and sent to every
+        # browser, so each extra spelling of the same file would add another
+        # entry.
+        if os.path.relpath(icon_path, root) != icon.replace("/", os.sep) + ".svg":
+            LOGGER.debug("Refusing non-canonical local icon name: %.100s", icon)
+            return None
+
         loop = asyncio.get_running_loop()
         try:
             svg = await loop.run_in_executor(None, read_icon, icon_path)

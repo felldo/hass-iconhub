@@ -26,7 +26,12 @@ const UNSAFE_CSS =
 const purify = createDOMPurify(window);
 
 purify.addHook("uponSanitizeElement", (node, data) => {
-  if (data.tagName === "style" && UNSAFE_CSS.test(node.textContent ?? ""))
+  if (data.tagName !== "style") return;
+  // Checked before DOMPurify looks at the children. Any element inside the
+  // style would be removed (<script>) or skipped (<g>) later, joining the text
+  // around it into a new token: "ur<script>x</script>l(" becomes "url(". So a
+  // style must consist of text only.
+  if ((node as Element).firstElementChild || UNSAFE_CSS.test(node.textContent ?? ""))
     node.parentNode?.removeChild(node);
 });
 

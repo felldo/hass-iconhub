@@ -42,7 +42,10 @@ class IconHubIconifySamples extends LitElement {
   }
 
   _url(name: string) {
-    return `https://api.iconify.design/${this.prefix}/${name}.svg`;
+    // The names come from the downloaded collections.json and the URL is put
+    // into an inline style, so encoded (no ";" or ":" can get through) and
+    // quoted there. The backend only passes on valid icon names as well.
+    return `https://api.iconify.design/${encodeURIComponent(this.prefix)}/${encodeURIComponent(name)}.svg`;
   }
 
   render() {
@@ -63,7 +66,7 @@ class IconHubIconifySamples extends LitElement {
           html`<span
             class="mask"
             title=${name}
-            style="mask-image: url(${this._url(name)}); -webkit-mask-image: url(${this._url(name)})"
+            style='mask-image: url("${this._url(name)}"); -webkit-mask-image: url("${this._url(name)}")'
           ></span>`
     );
   }

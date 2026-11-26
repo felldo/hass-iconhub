@@ -33,12 +33,34 @@ async def test_local_icons(icon_dir, call):
 
 
 @pytest.mark.parametrize(
-    "name", ["../secret", "sub/../../secret", "ABSOLUTE", "broken", "missing"]
+    "name",
+    [
+        "../secret",
+        "sub/../../secret",
+        "ABSOLUTE",
+        "broken",
+        "missing",
+        # Other spellings of existing icons
+        "./home",
+        "sub/../home",
+        "x/../home",
+        "sub//deep",
+        "sub/./deep",
+    ],
 )
 async def test_local_rejects_outside_and_invalid(hass, icon_dir, call, name):
     if name == "ABSOLUTE":
         name = os.path.join(hass.root, "secret")
     assert (await call("ws_get_icon", set="local", icon=name)).error_code == "not_found"
+
+
+async def test_local_cache_has_one_entry_per_icon(icon_dir, entry, call):
+    # Every user's browser loads the whole cache, so other spellings of a name
+    # must not add entries to it
+    for name in ["home", "./home", "a/../home", "aa/../home", "home"]:
+        await call("ws_get_icon", set="local", icon=name)
+    assert list(entry.runtime_data.icon_cache["local"]) == ["home"]
+    assert len((await call("ws_get_cached_icons", set="local")).result) == 1
 
 
 async def test_disabled_local_set(icon_dir, entry, call):

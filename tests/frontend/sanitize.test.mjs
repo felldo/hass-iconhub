@@ -82,6 +82,11 @@ const HOSTILE = {
   "protocol-relative url in style": `<style>path{fill:url( '//evil.example/x')}</style>`,
   "escaped url in style": `<style>path{fill:u\\72l(https://evil.example/x)}</style>`,
   "image-set in style": `<style>path{background:image-set("https://evil.example/x" 1x)}</style>`,
+  // The removed <script> would join the text around it into a new token
+  "import split by a script in style": `<style>@imp<script>x</script>ort "https://evil.example/x.css";</style>`,
+  "url split by a script in style": `<style>path{fill:ur<script>x</script>l(https://evil.example/x)}</style>`,
+  // Browsers build the style sheet from the text children only
+  "url split by an element in style": `<style>:host{background:ur<g>x</g>l(https://evil.example/x)}</style>`,
   "url in a style attribute": `<path style="fill:url(https://evil.example/x)"/>`,
   "escaped url in a style attribute": `<path style="fill:\\75rl(https://evil.example/x)"/>`,
   "url in a presentation attribute": `<path filter="url(https://evil.example/x#a)"/>`,
@@ -107,8 +112,10 @@ const assertSafe = (innerSVG) => {
       if (/^attributename$/i.test(name))
         assert.doesNotMatch(value, /href|^on/i, innerSVG);
     }
-    if (el.localName === "style")
+    if (el.localName === "style") {
       assert.doesNotMatch(el.textContent, /evil\.example|@import/i, innerSVG);
+      assert.equal(el.firstElementChild, null, innerSVG);
+    }
   }
 };
 

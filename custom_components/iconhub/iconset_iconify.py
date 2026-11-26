@@ -43,7 +43,21 @@ TaskFactory = Callable[[Coroutine[Any, Any, Any], str], asyncio.Future]
 
 
 def valid_prefix(prefix: str) -> bool:
-    return bool(PREFIX_RE.match(prefix))
+    # fullmatch: with match, "$" would also accept a trailing newline
+    return isinstance(prefix, str) and bool(PREFIX_RE.fullmatch(prefix))
+
+
+def sample_names(info: dict) -> list[str]:
+    """Up to 6 sample icon names of a set, for the panel's previews.
+
+    They come from the downloaded collections.json and end up in URLs and
+    inline styles in the panel, so only valid Iconify icon names (same format
+    as prefixes) are passed on.
+    """
+    samples = info.get("samples")
+    if not isinstance(samples, list):
+        return []
+    return [name for name in samples if valid_prefix(name)][:6]
 
 
 def _read_json(path: str) -> dict | None:
@@ -506,7 +520,7 @@ class IconifySets(IconSetCollection):
                 # Previews are loaded by the browser from the Iconify API, so
                 # the panel doesn't need any set to be downloaded.
                 "sample_icons": [],
-                "sample_names": info.get("samples", [])[:6],
+                "sample_names": sample_names(info),
                 # When the stored copy was downloaded (unix time), if any
                 "downloaded": downloaded.get(prefix),
             }
